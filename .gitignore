@@ -384,3 +384,7 @@ TSWLatexianTemp*
 
 # expex forward references with \gathertags
 *-tags.tex
+
+# MacOS
+*.DS_Store
+
