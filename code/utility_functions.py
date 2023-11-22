@@ -25,15 +25,26 @@ def get_performance_metrics(model, classifier_name: str, data: tuple) -> dict:
     d['train_AUC-ROC'] = roc_auc_score(y_train, y_score_train)
     d['train_AUC-PR'] = average_precision_score(y_train, y_score_train)
     d['train_precision'] = precision_score(y_train, y_pred_train)
-    d['train_recall_sensitivity'] = recall_score(y_train, y_pred_train, pos_label=1)
+    d['train_recall-sensitivity'] = recall_score(y_train, y_pred_train, pos_label=1)
     d['train_specificity'] = recall_score(y_train, y_pred_train, pos_label=0)
     d['train_F1'] = f1_score(y_train, y_pred_train)
 
     d['test_AUC-ROC'] = roc_auc_score(y_test, y_score_test)
     d['test_AUC-PR'] = average_precision_score(y_test, y_score_test)
     d['test_precision'] = precision_score(y_test, y_pred_test)
-    d['test_recall_sensitivity'] = recall_score(y_test, y_pred_test, pos_label=1)
+    d['test_recall-sensitivity'] = recall_score(y_test, y_pred_test, pos_label=1)
     d['test_specificity'] = recall_score(y_test, y_pred_test, pos_label=0)
     d['test_F1'] = f1_score(y_test, y_pred_test)
     
     return d
+
+# get performance metrics in a long format DataFrame
+def get_results_df(results_list: list):
+    import pandas as pd
+    df = pd.DataFrame(results_list).melt(id_vars='model')
+    df = pd.concat([df, df['variable'].str.split('_', expand=True)], axis=1).drop('variable', axis=1)
+    df = df.rename(columns={0: 'partition', 1: 'metric'})
+    df = df.reindex(columns=['model', 'partition', 'metric', 'value'])
+    return df
+    
+    
