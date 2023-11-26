@@ -127,7 +127,7 @@ def plot_ROC_curves(models: dict, data: tuple):
     X_train, X_test, y_train, y_test = data
 
     # set up the subplots for training and test data
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
     # plot for Training Data
     for name, model in models.items():
@@ -208,7 +208,7 @@ def plot_PR_curves(models: dict, data: tuple):
     X_train, X_test, y_train, y_test = data
     
     # set up the subplots for training and test data
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
     # plot for Training Data
     for name, model in models.items():
@@ -259,7 +259,7 @@ def plot_PR_curves(models: dict, data: tuple):
     ax1.legend(loc='lower left')
     ax1.grid(True)
 
-    ax2.set_title('Precision-Recall Curves AP (average precision) for Test Data')
+    ax2.set_title('Precision-Recall Curves with AP (average precision) for Test Data')
     ax2.set_xlabel('Recall')
     ax2.set_ylabel('Precision')
     ax2.legend(loc='lower left')
