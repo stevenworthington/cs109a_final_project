@@ -5,36 +5,30 @@
 ##### Function to Process Max Glu Serum
 #################################################################################
 def process_max_glu_serum(df):
+    df_new = df.copy() 
 
-    df_copy = df.copy() 
-
-    if 'max_glu_serum' not in df_copy.columns:
+    if 'max_glu_serum' not in df_new.columns:
         print("Max glu serum is not a feature in the dataframe")
         return None
 
-    df_copy['max_glu_serum_high'] = df_copy['max_glu_serum'].fillna(0).replace({'>300':1, 'Norm':0,'>200':0})
-    
-    df_copy['max_glu_serum'] = df_copy['max_glu_serum'].fillna('UNK') #not measured
-    
-    return df_copy
+    df_new['max_glu_serum_high'] = df_new['max_glu_serum'].fillna(0).replace({'>300':1, 'Norm':0,'>200':0})
+    df_new['max_glu_serum'] = df_new['max_glu_serum'].fillna('UNK') #not measured
+    return df_new
     
 
 #################################################################################
 ##### Function to Process A1C Result
 #################################################################################
 def process_A1Cresult(df):
+    df_new = df.copy() 
 
-    df_copy = df.copy() 
-
-    if 'A1Cresult' not in df_copy.columns:
+    if 'A1Cresult' not in df_new.columns:
         print("A1Cresult is not a feature in the dataframe")
         return None
     
-    df_copy['a1c_result_high'] = df_copy['A1Cresult'].fillna(0).replace({'>8':1,'Norm':0,'>7':0})
-    
-    df_copy['A1Cresult'] = df_copy['A1Cresult'].fillna('UNK')
-
-    return df_copy
+    df_new['a1c_result_high'] = df_new['A1Cresult'].fillna(0).replace({'>8':1,'Norm':0,'>7':0})
+    df_new['A1Cresult'] = df_new['A1Cresult'].fillna('UNK')
+    return df_new
     
 
 #################################################################################
@@ -42,26 +36,21 @@ def process_A1Cresult(df):
 #################################################################################
 # appears to modify in place
 def process_medical_specialty(df, take_top_num = 9):
-    df_copy = df.copy()
-
-    frequent_specialties = df_copy['medical_specialty'].value_counts().index[:take_top_num].values
-
-    df_copy.loc[~df_encounters['medical_specialty'].isin(frequent_specialties), 'medical_specialty'] = 'Other'
-
-    df_copy.loc[df_encounters['medical_specialty'].isin(['Orthopedics','Orthopedics-Reconstructive']), 
-                  'medical_specialty'] = 'Orthopedics'
-    
-    return df_copy
+    df_new = df.copy()
+    frequent_specialties = df_new['medical_specialty'].value_counts().index[:take_top_num].values
+    df_new.loc[~df_new['medical_specialty'].isin(frequent_specialties), 'medical_specialty'] = 'Other'
+    df_new.loc[df_new['medical_specialty'].isin(['Orthopedics','Orthopedics-Reconstructive']), 
+                      'medical_specialty'] = 'Orthopedics'
+    return df_new
     
 
 #################################################################################
 ##### Function to Process Race
 #################################################################################
 def process_race(df):
-    df_copy = df.copy()
-    df_copy.race.fillna('UNK',inplace=True)
-    
-    return df_copy
+    df_new = df.copy()
+    df_new['race'].fillna('UNK', inplace=True)
+    return df_new
     
 
 #################################################################################
@@ -71,7 +60,7 @@ def process_race(df):
 # need to fix the E thing in the dataset and the regex
 # ignore this for now, look into it later
 def process_diag_codes(df):
-    df_copy = df.copy()
+    df_new = df.copy()
 
     group_to_code_patterns = dict()
     group_to_code_patterns['diabetes']=r'250\..*'
@@ -85,11 +74,11 @@ def process_diag_codes(df):
     group_to_code_patterns['other']=r'(V[0-9]+)|([0-9]+)|other.*'
 
     for diag in ['diag_1','diag_2','diag_3']:
-        df_copy[diag].fillna('UNK',inplace=True)
-        for group,pattern in group_to_code_patterns.items():
-            df_copy[diag]=df_copy[diag].str.replace(pattern,group,regex=True)
+        df_new[diag].fillna('UNK',inplace=True)
+        for group, pattern in group_to_code_patterns.items():
+            df_new[diag]=df_new[diag].str.replace(pattern, group, regex=True)
 
-    return df_copy
+    return df_new
 
 
 #################################################################################
@@ -97,9 +86,8 @@ def process_diag_codes(df):
 #################################################################################
 # would be nice to better generalize this, but it may not be worth it
 def process_age(df):
-    df_copy = df.copy()
-
-    df_copy['age'].replace({'[0-10)' :'[0-50)',
+    df_new = df.copy()
+    df_new['age'].replace({'[0-10)' :'[0-50)',
                             '[10-20)':'[0-50)',
                             '[20-30)':'[0-50)',
                             '[30-40)':'[0-50)',
@@ -107,8 +95,7 @@ def process_age(df):
                             '[80-90)':'[80-100)',
                             '[90-100)':'[80-100)'},
                             inplace=True)
-    
-    return df_copy
+    return df_new
     
 
 #################################################################################
@@ -116,97 +103,76 @@ def process_age(df):
 #################################################################################
 # will only provide descriptive labels for the 3 most common categories
 def process_discharge_disposition_id(df, keep_most_freq = 3):
-    df_copy = df.copy()
-
-    #remove patients transferred to hospice or those that died
-    df_copy = df_copy[~df_encounters.discharge_disposition_id.isin([11,13,14,19,20,21])]
-
-    #collapse unimportant ones
-
-    most_freq = df_copy['discharge_disposition_id'].value_counts()[:keep_most_freq].index.values
-    
-    df_copy['discharge_disposition_id']=df_copy['discharge_disposition_id'].apply(lambda id: id if id in most_freq else 0)
-
-    df_copy.discharge_disposition_id.replace({0:'Other',1:'Home',3:'SNF',6:'Home w/ Service'}, inplace=True)
-
-    return df_copy
+    df_new = df.copy()
+    # remove patients transferred to hospice or those that died
+    df_new = df_new[~df_new['discharge_disposition_id'].isin([11,13,14,19,20,21])]
+    # collapse unimportant ones
+    most_freq = df_new['discharge_disposition_id'].value_counts()[:keep_most_freq].index.values
+    df_new['discharge_disposition_id']=df_new['discharge_disposition_id'].apply(lambda id: id if id in most_freq else 0)
+    df_new.discharge_disposition_id.replace({0:'Other',1:'Home',3:'SNF',6:'Home w/ Service'}, inplace=True)
+    return df_new
     
 
 #################################################################################
 ##### Function to Process Admission Type ID
 #################################################################################
 def process_admission_type_id(df, keep_most_freq=3):
-
-        df_copy = df.copy()
-
-        most_freq = df_copy['admission_type_id'].value_counts()[:keep_most_freq].index.values
-
-        df_copy['admission_type_id'] = df_copy['admission_type_id'].apply(lambda id: 0 if id >=4 else id)
-
-        df_copy.admission_type_id.replace({0:'Other',1:'Emergency',2:'Urgent',3:'Elective'}, inplace=True)
-
-        return df_copy
+        df_new = df.copy()
+        most_freq = df_new['admission_type_id'].value_counts()[:keep_most_freq].index.values
+        df_new['admission_type_id'] = df_new['admission_type_id'].apply(lambda id: 0 if id >=4 else id)
+        df_new['admission_type_id'].replace({0:'Other',1:'Emergency',2:'Urgent',3:'Elective'}, inplace=True)
+        return df_new
         
 
 #################################################################################
 ##### Function to Process Admission Source ID
 #################################################################################
 def process_admission_source_ID(df):
-    df_copy = df.copy()
-    df_copy.loc[~df_encounters['admission_source_id'].isin([1,7]) , 'admission_source_id'] = 0
-    df_copy.admission_source_id.replace({0:'Other',1:'Physician Referral',7:'Emergency Room'},
-                                           inplace=True)
-    
-    return df_copy
+    df_new = df.copy()
+    df_new.loc[~df_new['admission_source_id'].isin([1,7]) , 'admission_source_id'] = 0
+    df_new['admission_source_id'].replace({0:'Other',1:'Physician Referral',7:'Emergency Room'}, inplace=True)
+    return df_new
     
 
 #################################################################################
 ##### Function to Process Readmitted
 #################################################################################
 def process_readmitted(df):
-    df_copy = df.copy()
-    df_copy['readmitted'].replace({'<30':1,'NO':0,'>30':0},inplace=True)
-
-    return df_copy
+    df_new = df.copy()
+    df_new['readmitted'].replace({'<30':1,'NO':0,'>30':0}, inplace=True)
+    return df_new
     
 
 #################################################################################
 ##### Function to Process Diabetes Med and Change Features
 #################################################################################
 def process_diabetesMed_and_change(df):
-
-    df_copy = df.copy()
-
-    df_copy['diabetesMed'].replace({'Yes':1,'No':0},inplace=True)
-    df_copy['change'].replace({'Ch':1,'No':0},inplace=True)
-
-    return df_copy
+    df_new = df.copy()
+    df_new['diabetesMed'].replace({'Yes':1,'No':0}, inplace=True)
+    df_new['change'].replace({'Ch':1,'No':0}, inplace=True)
+    return df_new
     
 
 #################################################################################
 ##### Function to Chain Together All Preprocessing Functions
 #################################################################################
 def preprocess_df(df, process_list):
-    
-    df_copy = df.copy()
-
-    df_copy.drop(['weight', 'payer_code'], axis=1, inplace=True)
+    df_new = df.copy()
+    df_new.drop(['weight', 'payer_code'], axis=1, inplace=True)
 
     for func in process_list:
-        df_copy = func(df_copy)
+        df_new = func(df_new)
 
-    return df_copy
+    return df_new
     
 
 #################################################################################
 ##### Function to get previous encounters
 #################################################################################
 def get_previous_encounters(df):
-    df_copy = df.copy()
-
-    df_mult_encounter_patients = df_copy.groupby('patient_nbr').filter(lambda group: len(group)>1)
+    df_new = df.copy()
+    df_mult_encounter_patients = df_new.groupby('patient_nbr').filter(lambda group: len(group)>1)
     df_mult_encounter_patients_previous = df_mult_encounter_patients.groupby('patient_nbr').apply(lambda group: group.iloc[:-1]).reset_index(drop=True)
-    
     return df_mult_encounter_patients_previous
     
 
@@ -214,9 +180,8 @@ def get_previous_encounters(df):
 ##### Function to get aggregate previous encounters
 #################################################################################
 def aggregate_previous_encounters(df):
-    df_copy = df.copy()
-
-    df_patient_agg = df_copy.groupby('patient_nbr').agg({'encounter_id':'nunique',
+    df_new = df.copy()
+    df_patient_agg = df_new.groupby('patient_nbr').agg({'encounter_id':'nunique',
                                   'time_in_hospital':['mean','min','max'],
                                   'num_lab_procedures':['mean','min','max'],
                                   'num_procedures': ['mean','min','max'],
@@ -230,7 +195,6 @@ def aggregate_previous_encounters(df):
                                   'diabetesMed': ['mean','sum','all','any'],
                                   'readmitted': ['mean','sum','all','any']})
     
-
     aggr_cols = ['num_encounters',
                 'avg_time_in_hospital','min_time_in_hospital','max_time_in_hospital',
                 'avg_num_lab_procedures','min_num_lab_procedures','max_num_lab_procedures',
@@ -258,9 +222,8 @@ def aggregate_previous_encounters(df):
 ##### Function to get last encounters
 #################################################################################
 def get_last_encounter(df):
-    df_copy = df.copy()
-
-    return df_copy.groupby('patient_nbr').last()
+    df_new = df.copy()
+    return df_new.groupby('patient_nbr').last()
     
 
 #################################################################################
@@ -276,18 +239,13 @@ def aggregate_encounters(df):
         print('There are no patients to aggregate')
         return 0
     
-    df_copy = df.copy()
-
-    last_encounters = get_last_encounter(df_copy)
-
-    previous_encounters = get_previous_encounters(df_copy)
+    df_new = df.copy()
+    last_encounters = get_last_encounter(df_new)
+    previous_encounters = get_previous_encounters(df_new)
     agg_previous_encounters = aggregate_previous_encounters(previous_encounters)
-
     df_patient = last_encounters.merge(agg_previous_encounters, on='patient_nbr', how='left').fillna(0)
-
-    #no use for encounter_id or the two other temp columns anymore
-    df_patient.drop(['encounter_id','a1c_result_high','max_glu_serum_high'],axis=1,inplace=True)
-
+    # no use for encounter_id or the two other temp columns anymore
+    df_patient.drop(['encounter_id','a1c_result_high','max_glu_serum_high'], axis=1, inplace=True)
     return df_patient
     
     
@@ -305,6 +263,7 @@ def get_performance_metrics(model, classifier_name: str, data: tuple) -> dict:
     Returns:
     metrics : (dict)
     '''
+    import numpy as np
     from sklearn.metrics import roc_auc_score, average_precision_score
     from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
     
@@ -445,7 +404,7 @@ def plot_ROC_curves(models: dict, data: tuple):
     X_train, X_test, y_train, y_test = data
 
     # set up the subplots for training and test data
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
     # plot for Training Data
     for name, model in models.items():
@@ -526,7 +485,7 @@ def plot_PR_curves(models: dict, data: tuple):
     X_train, X_test, y_train, y_test = data
     
     # set up the subplots for training and test data
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
     # plot for Training Data
     for name, model in models.items():
@@ -571,13 +530,13 @@ def plot_PR_curves(models: dict, data: tuple):
     ax2.set_ylim([-0.05, 1.05])
 
     # add plot details for both subplots
-    ax1.set_title('Precision-Recall Curves with AP (average precision) for Training Data')
+    ax1.set_title('Precision-Recall Curves\nwith AP (average precision) for Training Data')
     ax1.set_xlabel('Recall')
     ax1.set_ylabel('Precision')
     ax1.legend(loc='lower left')
     ax1.grid(True)
 
-    ax2.set_title('Precision-Recall Curves with AP (average precision) for Test Data')
+    ax2.set_title('Precision-Recall Curves\nwith AP (average precision) for Test Data')
     ax2.set_xlabel('Recall')
     ax2.set_ylabel('Precision')
     ax2.legend(loc='lower left')
