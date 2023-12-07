@@ -248,6 +248,32 @@ def aggregate_encounters(df):
     df_patient.drop(['encounter_id','a1c_result_high','max_glu_serum_high'], axis=1, inplace=True)
     return df_patient
     
+
+#################################################################################
+##### Function to perform data partitioning
+#################################################################################
+def stratified_split(df):
+    y = df['readmitted']
+    X = df.drop(columns=['readmitted'])
+    from sklearn.model_selection import train_test_split
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y,
+        stratify=y, 
+        train_size=0.80, 
+        random_state=109
+    )
+
+    print('===============================================================')
+    print('Before splitting the class percentage in our dataset is:',  
+          round(df['readmitted'].sum()/len(df['readmitted']), 4))
+    print('After splitting the class percentage in y_train is:', 
+          round(y_train.sum()/len(y_train), 4))
+    print('After splitting the class percentage in y_test is:', 
+          round(y_test.sum()/len(y_test), 4))
+    print('===============================================================')
+    
+    return X_train, X_test, y_train, y_test
+    
     
 #################################################################################
 ##### Function to calculate all performance metrics
@@ -398,6 +424,7 @@ def plot_ROC_curves(models: dict, data: tuple):
     from sklearn.tree import DecisionTreeClassifier 
     from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
     from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
     from sklearn.metrics import roc_auc_score, roc_curve, RocCurveDisplay, auc
     
     # unpack the data
@@ -479,6 +506,7 @@ def plot_PR_curves(models: dict, data: tuple):
     from sklearn.tree import DecisionTreeClassifier 
     from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
     from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
     from sklearn.metrics import average_precision_score, precision_recall_curve, PrecisionRecallDisplay
 
     # unpack the data
@@ -543,4 +571,136 @@ def plot_PR_curves(models: dict, data: tuple):
     ax2.grid(True)
 
     plt.show()    
+    
+
+#################################################################################    
+##### Function to get mean training and validation scores for each parameter combination
+#################################################################################
+def get_train_val_scores(model, params):
+    '''
+    Parameters
+    ----------
+    model : fitted sklearn model
+    params : list of hyperparameters that have been tuned
+    
+    Returns: pandas data frame
+    '''
+    import pandas as pd
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+    
+    score_cols = ['mean_test_score', 'std_test_score', 'mean_train_score']
+    param_cols = ['param_' + param for param in params]
+    df_scores = pd.DataFrame(model.cv_results_)[score_cols + param_cols]
+    df_scores.sort_values(by='mean_test_score', ascending=False, inplace=True)
+    
+    return df_scores
+    
+    
+#################################################################################    
+##### Function to compute variable importances
+#################################################################################
+def plot_var_imp(model, n_features=20, figsize=(8, 4)):
+    '''
+    Parameters
+    ----------
+    model : fitted sklearn model
+    n_features : number of best features to plot in decending order
+    figsize: size of the figure
+
+    Returns: (plot)
+    '''
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+
+    df = pd.DataFrame([model.best_estimator_.feature_names_in_, model.best_estimator_.feature_importances_]).T
+    df.columns = ['Features', 'Importances']
+    df.sort_values(by='Importances', ascending=False, inplace=True)
+    plt.figure(figsize=figsize)
+    sns.barplot(x='Importances', y='Features', data=df.head(n_features), ci=None, color='#4286f4')
+    plt.tight_layout();
+    
+
+#################################################################################    
+##### Function to plot SHAP feature importance
+#################################################################################
+def plot_shap_values(model, X_train, X_test, n_samples=100, figsize=(10, 6)):
+    '''
+    Parameters
+    ----------
+    model : fitted sklearn model
+    X_train: training features
+    X_test: testing features
+    n_samples: the maximum number of samples to use from the passed background data
+    figsize: size of the figure
+
+    Returns: (plot)
+    '''
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+    from shap import TreeExplainer, summary_plot, maskers
+    
+    background = maskers.Independent(X_train, max_samples=n_samples) # data to train explainer on
+    exp = TreeExplainer(model.best_estimator_, 
+                                     data=background, 
+                                     feature_perturbation='interventional', 
+                                     model_output='probability')
+    sv = exp.shap_values(X_test, approximate=True, tree_limit=1000)
+    summary_plot(sv[1], X_test, plot_size=figsize) # for class 1    
+    
+
+#################################################################################    
+##### Function to plot LIME feature importance
+#################################################################################
+def plot_LIME(model, X_train, X_test, idx=1, n_features=4):
+    '''
+    Parameters
+    ----------
+    model : fitted sklearn model
+    X_train: training features
+    X_test: testing features
+    idx: the instance to explain from the test set
+    n_features: number of features to use
+
+    Returns: (plot)
+    '''
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+    from lime.lime_tabular import LimeTabularExplainer
+
+    # create a LIME Explainer
+    explainer = LimeTabularExplainer(
+        training_data=X_train.values,
+        feature_names=X_train.columns.tolist(),
+        class_names=[0, 1],
+        mode='classification'
+    )
+    
+    # instance to explain from the test set
+    instance = X_test.values[idx]
+    # generate an explanation for a prediction
+    exp = explainer.explain_instance(instance, model.predict_proba, num_features=n_features)
+    # show the explanation
+    exp.show_in_notebook(show_table=True)    
     
