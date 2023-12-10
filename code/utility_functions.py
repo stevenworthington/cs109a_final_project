@@ -230,7 +230,8 @@ def get_last_encounter(df):
 ##### Function to aggregate encounters
 #################################################################################
 def aggregate_encounters(df):
-
+    import utility_functions as utl
+    
     if 'patient_nbr' not in df.columns:
         print("Patient_nbr is not in the dataframe")
         return None
@@ -240,9 +241,9 @@ def aggregate_encounters(df):
         return 0
     
     df_new = df.copy()
-    last_encounters = get_last_encounter(df_new)
-    previous_encounters = get_previous_encounters(df_new)
-    agg_previous_encounters = aggregate_previous_encounters(previous_encounters)
+    last_encounters = utl.get_last_encounter(df_new)
+    previous_encounters = utl.get_previous_encounters(df_new)
+    agg_previous_encounters = utl.aggregate_previous_encounters(previous_encounters)
     df_patient = last_encounters.merge(agg_previous_encounters, on='patient_nbr', how='left').fillna(0)
     # no use for encounter_id or the two other temp columns anymore
     df_patient.drop(['encounter_id','a1c_result_high','max_glu_serum_high'], axis=1, inplace=True)
@@ -278,13 +279,14 @@ def stratified_split(df):
 #################################################################################
 ##### Function to calculate all performance metrics
 #################################################################################
-def get_performance_metrics(model, classifier_name: str, data: tuple) -> dict:
+def get_performance_metrics(model, classifier_name: str, data: tuple, threshold=None) -> dict:
     '''
     Parameters
     ----------
     model : (sklearn estimator) The fitted sklearn model
     classifier_name : (str) The name of the classifier used
     data : (tuple) Contains train and test split for X and y
+    threshold: (float) Threshold for converting probabilities to classes
 
     Returns:
     metrics : (dict)
@@ -293,35 +295,45 @@ def get_performance_metrics(model, classifier_name: str, data: tuple) -> dict:
     from sklearn.metrics import roc_auc_score, average_precision_score
     from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
     
+    # unpack data
     X_train, X_test, y_train, y_test = data
-    d = {}
-    y_score_train = model.predict_proba(X_train)[:, 1] # prob
-    y_pred_train = model.predict(X_train) # class
-    y_score_test = model.predict_proba(X_test)[:, 1] # prob
-    y_pred_test = model.predict(X_test) # class
     
+    # get class probabilities
+    y_score_train = model.predict_proba(X_train)[:, 1]
+    y_score_test = model.predict_proba(X_test)[:, 1]
+    
+    # If threshold is None, set it to the mean of y_score_train
+    if threshold is None:
+        threshold = np.mean(y_score_train)
+
+    # convert class probabilities to binary class identifiers
+    y_class_train = np.where(y_score_train > threshold, 1, 0)
+    y_class_test = np.where(y_score_test > threshold, 1, 0)
+    
+    # create dictionary of metrics    
+    d = {}
     d['model'] = classifier_name
     d['Train_Readmitted-Rate-Observed'] = np.mean(y_train)
     d['Train_Readmitted-Rate-Predicted'] = np.mean(y_score_train)
     d['Train_Naive-Accuracy'] = 1-np.mean(y_train)
-    d['Train_Accuracy'] = accuracy_score(y_train, y_pred_train)
+    d['Train_Accuracy'] = accuracy_score(y_train, y_class_train)
     d['Train_AUC-ROC'] = roc_auc_score(y_train, y_score_train)
     d['Train_AUC-PR'] = average_precision_score(y_train, y_score_train)
-    d['Train_F1-Score'] = f1_score(y_train, y_pred_train)
-    d['Train_Recall-Sensitivity'] = recall_score(y_train, y_pred_train, pos_label=1)
-    d['Train_Specificity'] = recall_score(y_train, y_pred_train, pos_label=0)
-    d['Train_Precision'] = precision_score(y_train, y_pred_train)
+    d['Train_F1-Score'] = f1_score(y_train, y_class_train)
+    d['Train_Recall-Sensitivity'] = recall_score(y_train, y_class_train, pos_label=1)
+    d['Train_Specificity'] = recall_score(y_train, y_class_train, pos_label=0)
+    d['Train_Precision'] = precision_score(y_train, y_class_train)
     
     d['Test_Readmitted-Rate-Observed'] = np.mean(y_test)
     d['Test_Readmitted-Rate-Predicted'] = np.mean(y_score_test)
     d['Test_Naive-Accuracy'] = 1-np.mean(y_test)
-    d['Test_Accuracy'] = accuracy_score(y_test, y_pred_test)
+    d['Test_Accuracy'] = accuracy_score(y_test, y_class_test)
     d['Test_AUC-ROC'] = roc_auc_score(y_test, y_score_test)
     d['Test_AUC-PR'] = average_precision_score(y_test, y_score_test)
-    d['Test_F1-Score'] = f1_score(y_test, y_pred_test)
-    d['Test_Recall-Sensitivity'] = recall_score(y_test, y_pred_test, pos_label=1)
-    d['Test_Specificity'] = recall_score(y_test, y_pred_test, pos_label=0)
-    d['Test_Precision'] = precision_score(y_test, y_pred_test)
+    d['Test_F1-Score'] = f1_score(y_test, y_class_test)
+    d['Test_Recall-Sensitivity'] = recall_score(y_test, y_class_test, pos_label=1)
+    d['Test_Specificity'] = recall_score(y_test, y_class_test, pos_label=0)
+    d['Test_Precision'] = precision_score(y_test, y_class_test)
     
     return d
 
@@ -360,21 +372,29 @@ def get_results_df(results: list, model: str = None):
 #################################################################################
 ##### Function to plot performance metrics for train and test sets
 #################################################################################
-def plot_performance_metrics(df):
+def plot_performance_metrics(df, model_order=None):
     '''
     Parameters
     ----------
     df : (DataFrame) pandas data frame of model performance metrics
-
+    model_order: (list) a list of model names to plot in that order
+        
     Returns: (plot)
     '''
     import pandas as pd
     from plotnine import ggplot, aes, geom_bar, geom_text, facet_wrap, labs, theme
     from plotnine import element_text, scale_fill_manual, scale_y_continuous, position_dodge
     
+    # If model_order is None, set it to the current order
+    if model_order is None:
+        model_order = df['model'].unique().tolist()
+
     # set the desired order of the models in the DataFrame
-    model_order = ['Base Model', 'Logistic Regularized', 'Decision Tree', 'Random Forest', 'Gradient Boosting']
     df['model'] = pd.Categorical(df['model'], categories=model_order, ordered=True)
+    
+    # set the desired order of the partitions in the DataFrame
+    partition_order = ['Train', 'Test']
+    df['partition'] = pd.Categorical(df['partition'], categories=partition_order, ordered=True)
     
     # set the desired order of the metrics in the DataFrame
     metric_order = ['Readmitted-Rate-Observed', 'Readmitted-Rate-Predicted', 'Naive-Accuracy', 'Accuracy',
@@ -599,11 +619,50 @@ def get_train_val_scores(model, params):
     
     return df_scores
     
+ 
+ #################################################################################    
+##### Function to compute feature importances (permutation importance)
+#################################################################################
+def plot_feature_imp_perm(model, X_test, y_test, n_features=20, figsize=(8, 4)):
+    '''
+    Parameters
+    ----------
+    model : fitted sklearn model
+    X_test, y_test: test set data
+    n_features : number of best features to plot in decending order
+    figsize: size of the figure
+
+    Returns: (plot)
+    '''
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+    from sklearn.inspection import permutation_importance
+    
+    # compute permutation Importance
+    pi_results = permutation_importance(model.best_estimator_, X_test, y_test, n_repeats=10, random_state=109)
+
+    # organize results in DataFrame
+    pi_data = {'Importance_mean': pi_results['importances_mean'],
+                     'Importance_std': pi_results['importances_std'],
+                     'Feature': X_test.columns}
+    pi_df = pd.DataFrame(pi_data).sort_values('Importance_mean', ascending=False)
+
+    # plot
+    plt.figure(figsize=figsize)
+    sns.barplot(x='Importance_mean', y='Feature', data=pi_df.head(n_features), ci=None, color='#4286f4')
+    plt.tight_layout();
+    
     
 #################################################################################    
-##### Function to compute variable importances
+##### Function to compute feature importances (mean decrease in impurity)
 #################################################################################
-def plot_var_imp(model, n_features=20, figsize=(8, 4)):
+def plot_feature_imp_MDI(model, n_features=20, figsize=(8, 4)):
     '''
     Parameters
     ----------
@@ -623,10 +682,10 @@ def plot_var_imp(model, n_features=20, figsize=(8, 4)):
     from xgboost import XGBClassifier
 
     df = pd.DataFrame([model.best_estimator_.feature_names_in_, model.best_estimator_.feature_importances_]).T
-    df.columns = ['Features', 'Importances']
-    df.sort_values(by='Importances', ascending=False, inplace=True)
+    df.columns = ['Feature', 'Importance']
+    df.sort_values(by='Importance', ascending=False, inplace=True)
     plt.figure(figsize=figsize)
-    sns.barplot(x='Importances', y='Features', data=df.head(n_features), ci=None, color='#4286f4')
+    sns.barplot(x='Importance', y='Feature', data=df.head(n_features), ci=None, color='#4286f4')
     plt.tight_layout();
     
 
