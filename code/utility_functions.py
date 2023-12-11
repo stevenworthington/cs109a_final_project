@@ -497,13 +497,13 @@ def plot_ROC_curves(models: dict, data: tuple):
     ax1.set_title('ROC Curves and AUC for Training Data')
     ax1.set_xlabel('False Positive Rate')
     ax1.set_ylabel('True Positive Rate')
-    ax1.legend(loc='lower right')
+    ax1.legend(loc='lower right', fontsize=8)
     ax1.grid(True)
 
     ax2.set_title('ROC Curves and AUC for Test Data')
     ax2.set_xlabel('False Positive Rate')
     ax2.set_ylabel('True Positive Rate')
-    ax2.legend(loc='lower right')
+    ax2.legend(loc='lower right', fontsize=8)
     ax2.grid(True)
 
     plt.show()
@@ -581,13 +581,13 @@ def plot_PR_curves(models: dict, data: tuple):
     ax1.set_title('Precision-Recall Curves\nwith AP (average precision) for Training Data')
     ax1.set_xlabel('Recall')
     ax1.set_ylabel('Precision')
-    ax1.legend(loc='lower left')
+    ax1.legend(loc='center', fontsize=8)
     ax1.grid(True)
 
     ax2.set_title('Precision-Recall Curves\nwith AP (average precision) for Test Data')
     ax2.set_xlabel('Recall')
     ax2.set_ylabel('Precision')
-    ax2.legend(loc='lower left')
+    ax2.legend(loc='center', fontsize=8)
     ax2.grid(True)
 
     plt.show()    
@@ -655,7 +655,11 @@ def plot_feature_imp_perm(model, X_test, y_test, n_features=20, figsize=(8, 4)):
 
     # plot
     plt.figure(figsize=figsize)
-    sns.barplot(x='Importance_mean', y='Feature', data=pi_df.head(n_features), ci=None, color='#4286f4')
+    ax = sns.barplot(x='Importance_mean', y='Feature', data=pi_df.head(n_features), color='#4286f4')
+    error = pi_df.head(n_features)['Importance_std'] * 2
+    ax.errorbar(x=pi_df.head(n_features)['Importance_mean'], y=pi_df.head(n_features)['Feature'], xerr=error, fmt=' ', color='red', capsize=5)
+    ax.set_xlabel('Importance (Mean +/- Standard Deviation)')
+    ax.set_title('Permutation-based Feature Importance')
     plt.tight_layout();
     
     
@@ -685,7 +689,8 @@ def plot_feature_imp_MDI(model, n_features=20, figsize=(8, 4)):
     df.columns = ['Feature', 'Importance']
     df.sort_values(by='Importance', ascending=False, inplace=True)
     plt.figure(figsize=figsize)
-    sns.barplot(x='Importance', y='Feature', data=df.head(n_features), ci=None, color='#4286f4')
+    ax = sns.barplot(x='Importance', y='Feature', data=df.head(n_features), color='#4286f4')
+    ax.set_title('Minimum Decrease in Impurity based Feature Importance')
     plt.tight_layout();
     
 
@@ -720,7 +725,8 @@ def plot_shap_values(model, X_train, X_test, n_samples=100, figsize=(10, 6)):
                                      feature_perturbation='interventional', 
                                      model_output='probability')
     sv = exp.shap_values(X_test, approximate=True, tree_limit=1000)
-    summary_plot(sv[1], X_test, plot_size=figsize) # for class 1    
+    plt.figure(figsize=figsize)
+    summary_plot(sv[1], X_test, plot_size=figsize) # for class 1   
     
 
 #################################################################################    
