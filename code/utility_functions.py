@@ -230,7 +230,8 @@ def get_last_encounter(df):
 ##### Function to aggregate encounters
 #################################################################################
 def aggregate_encounters(df):
-
+    import utility_functions as utl
+    
     if 'patient_nbr' not in df.columns:
         print("Patient_nbr is not in the dataframe")
         return None
@@ -240,25 +241,52 @@ def aggregate_encounters(df):
         return 0
     
     df_new = df.copy()
-    last_encounters = get_last_encounter(df_new)
-    previous_encounters = get_previous_encounters(df_new)
-    agg_previous_encounters = aggregate_previous_encounters(previous_encounters)
+    last_encounters = utl.get_last_encounter(df_new)
+    previous_encounters = utl.get_previous_encounters(df_new)
+    agg_previous_encounters = utl.aggregate_previous_encounters(previous_encounters)
     df_patient = last_encounters.merge(agg_previous_encounters, on='patient_nbr', how='left').fillna(0)
     # no use for encounter_id or the two other temp columns anymore
     df_patient.drop(['encounter_id','a1c_result_high','max_glu_serum_high'], axis=1, inplace=True)
     return df_patient
     
+
+#################################################################################
+##### Function to perform data partitioning
+#################################################################################
+def stratified_split(df):
+    y = df['readmitted']
+    X = df.drop(columns=['readmitted'])
+    from sklearn.model_selection import train_test_split
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y,
+        stratify=y, 
+        train_size=0.80, 
+        random_state=109
+    )
+
+    print('===============================================================')
+    print('Before splitting the class percentage in our dataset is:',  
+          round(df['readmitted'].sum()/len(df['readmitted']), 4))
+    print('After splitting the class percentage in y_train is:', 
+          round(y_train.sum()/len(y_train), 4))
+    print('After splitting the class percentage in y_test is:', 
+          round(y_test.sum()/len(y_test), 4))
+    print('===============================================================')
+    
+    return X_train, X_test, y_train, y_test
+    
     
 #################################################################################
 ##### Function to calculate all performance metrics
 #################################################################################
-def get_performance_metrics(model, classifier_name: str, data: tuple) -> dict:
+def get_performance_metrics(model, classifier_name: str, data: tuple, threshold=None) -> dict:
     '''
     Parameters
     ----------
     model : (sklearn estimator) The fitted sklearn model
     classifier_name : (str) The name of the classifier used
     data : (tuple) Contains train and test split for X and y
+    threshold: (float) Threshold for converting probabilities to classes
 
     Returns:
     metrics : (dict)
@@ -267,35 +295,45 @@ def get_performance_metrics(model, classifier_name: str, data: tuple) -> dict:
     from sklearn.metrics import roc_auc_score, average_precision_score
     from sklearn.metrics import precision_score, recall_score, f1_score, accuracy_score
     
+    # unpack data
     X_train, X_test, y_train, y_test = data
-    d = {}
-    y_score_train = model.predict_proba(X_train)[:, 1] # prob
-    y_pred_train = model.predict(X_train) # class
-    y_score_test = model.predict_proba(X_test)[:, 1] # prob
-    y_pred_test = model.predict(X_test) # class
     
+    # get class probabilities
+    y_score_train = model.predict_proba(X_train)[:, 1]
+    y_score_test = model.predict_proba(X_test)[:, 1]
+    
+    # If threshold is None, set it to the mean of y_score_train
+    if threshold is None:
+        threshold = np.mean(y_score_train)
+
+    # convert class probabilities to binary class identifiers
+    y_class_train = np.where(y_score_train > threshold, 1, 0)
+    y_class_test = np.where(y_score_test > threshold, 1, 0)
+    
+    # create dictionary of metrics    
+    d = {}
     d['model'] = classifier_name
     d['Train_Readmitted-Rate-Observed'] = np.mean(y_train)
     d['Train_Readmitted-Rate-Predicted'] = np.mean(y_score_train)
     d['Train_Naive-Accuracy'] = 1-np.mean(y_train)
-    d['Train_Accuracy'] = accuracy_score(y_train, y_pred_train)
+    d['Train_Accuracy'] = accuracy_score(y_train, y_class_train)
     d['Train_AUC-ROC'] = roc_auc_score(y_train, y_score_train)
     d['Train_AUC-PR'] = average_precision_score(y_train, y_score_train)
-    d['Train_F1-Score'] = f1_score(y_train, y_pred_train)
-    d['Train_Recall-Sensitivity'] = recall_score(y_train, y_pred_train, pos_label=1)
-    d['Train_Specificity'] = recall_score(y_train, y_pred_train, pos_label=0)
-    d['Train_Precision'] = precision_score(y_train, y_pred_train)
+    d['Train_F1-Score'] = f1_score(y_train, y_class_train)
+    d['Train_Recall-Sensitivity'] = recall_score(y_train, y_class_train, pos_label=1)
+    d['Train_Specificity'] = recall_score(y_train, y_class_train, pos_label=0)
+    d['Train_Precision'] = precision_score(y_train, y_class_train)
     
     d['Test_Readmitted-Rate-Observed'] = np.mean(y_test)
     d['Test_Readmitted-Rate-Predicted'] = np.mean(y_score_test)
     d['Test_Naive-Accuracy'] = 1-np.mean(y_test)
-    d['Test_Accuracy'] = accuracy_score(y_test, y_pred_test)
+    d['Test_Accuracy'] = accuracy_score(y_test, y_class_test)
     d['Test_AUC-ROC'] = roc_auc_score(y_test, y_score_test)
     d['Test_AUC-PR'] = average_precision_score(y_test, y_score_test)
-    d['Test_F1-Score'] = f1_score(y_test, y_pred_test)
-    d['Test_Recall-Sensitivity'] = recall_score(y_test, y_pred_test, pos_label=1)
-    d['Test_Specificity'] = recall_score(y_test, y_pred_test, pos_label=0)
-    d['Test_Precision'] = precision_score(y_test, y_pred_test)
+    d['Test_F1-Score'] = f1_score(y_test, y_class_test)
+    d['Test_Recall-Sensitivity'] = recall_score(y_test, y_class_test, pos_label=1)
+    d['Test_Specificity'] = recall_score(y_test, y_class_test, pos_label=0)
+    d['Test_Precision'] = precision_score(y_test, y_class_test)
     
     return d
 
@@ -334,21 +372,29 @@ def get_results_df(results: list, model: str = None):
 #################################################################################
 ##### Function to plot performance metrics for train and test sets
 #################################################################################
-def plot_performance_metrics(df):
+def plot_performance_metrics(df, model_order=None):
     '''
     Parameters
     ----------
     df : (DataFrame) pandas data frame of model performance metrics
-
+    model_order: (list) a list of model names to plot in that order
+        
     Returns: (plot)
     '''
     import pandas as pd
     from plotnine import ggplot, aes, geom_bar, geom_text, facet_wrap, labs, theme
     from plotnine import element_text, scale_fill_manual, scale_y_continuous, position_dodge
     
+    # If model_order is None, set it to the current order
+    if model_order is None:
+        model_order = df['model'].unique().tolist()
+
     # set the desired order of the models in the DataFrame
-    model_order = ['Base Model', 'Logistic Regularized', 'Decision Tree', 'Random Forest', 'Gradient Boosting']
     df['model'] = pd.Categorical(df['model'], categories=model_order, ordered=True)
+    
+    # set the desired order of the partitions in the DataFrame
+    partition_order = ['Train', 'Test']
+    df['partition'] = pd.Categorical(df['partition'], categories=partition_order, ordered=True)
     
     # set the desired order of the metrics in the DataFrame
     metric_order = ['Readmitted-Rate-Observed', 'Readmitted-Rate-Predicted', 'Naive-Accuracy', 'Accuracy',
@@ -398,6 +444,7 @@ def plot_ROC_curves(models: dict, data: tuple):
     from sklearn.tree import DecisionTreeClassifier 
     from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
     from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
     from sklearn.metrics import roc_auc_score, roc_curve, RocCurveDisplay, auc
     
     # unpack the data
@@ -450,13 +497,13 @@ def plot_ROC_curves(models: dict, data: tuple):
     ax1.set_title('ROC Curves and AUC for Training Data')
     ax1.set_xlabel('False Positive Rate')
     ax1.set_ylabel('True Positive Rate')
-    ax1.legend(loc='lower right')
+    ax1.legend(loc='lower right', fontsize=8)
     ax1.grid(True)
 
     ax2.set_title('ROC Curves and AUC for Test Data')
     ax2.set_xlabel('False Positive Rate')
     ax2.set_ylabel('True Positive Rate')
-    ax2.legend(loc='lower right')
+    ax2.legend(loc='lower right', fontsize=8)
     ax2.grid(True)
 
     plt.show()
@@ -479,6 +526,7 @@ def plot_PR_curves(models: dict, data: tuple):
     from sklearn.tree import DecisionTreeClassifier 
     from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
     from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
     from sklearn.metrics import average_precision_score, precision_recall_curve, PrecisionRecallDisplay
 
     # unpack the data
@@ -533,14 +581,191 @@ def plot_PR_curves(models: dict, data: tuple):
     ax1.set_title('Precision-Recall Curves\nwith AP (average precision) for Training Data')
     ax1.set_xlabel('Recall')
     ax1.set_ylabel('Precision')
-    ax1.legend(loc='lower left')
+    ax1.legend(loc='center', fontsize=8)
     ax1.grid(True)
 
     ax2.set_title('Precision-Recall Curves\nwith AP (average precision) for Test Data')
     ax2.set_xlabel('Recall')
     ax2.set_ylabel('Precision')
-    ax2.legend(loc='lower left')
+    ax2.legend(loc='center', fontsize=8)
     ax2.grid(True)
 
     plt.show()    
+    
+
+#################################################################################    
+##### Function to get mean training and validation scores for each parameter combination
+#################################################################################
+def get_train_val_scores(model, params):
+    '''
+    Parameters
+    ----------
+    model : fitted sklearn model
+    params : list of hyperparameters that have been tuned
+    
+    Returns: pandas data frame
+    '''
+    import pandas as pd
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+    
+    score_cols = ['mean_test_score', 'std_test_score', 'mean_train_score']
+    param_cols = ['param_' + param for param in params]
+    df_scores = pd.DataFrame(model.cv_results_)[score_cols + param_cols]
+    df_scores.sort_values(by='mean_test_score', ascending=False, inplace=True)
+    
+    return df_scores
+    
+ 
+ #################################################################################    
+##### Function to compute feature importances (permutation importance)
+#################################################################################
+def plot_feature_imp_perm(model, X_test, y_test, n_features=20, figsize=(8, 4)):
+    '''
+    Parameters
+    ----------
+    model : fitted sklearn model
+    X_test, y_test: test set data
+    n_features : number of best features to plot in decending order
+    figsize: size of the figure
+
+    Returns: (plot)
+    '''
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+    from sklearn.inspection import permutation_importance
+    
+    # compute permutation Importance
+    pi_results = permutation_importance(model.best_estimator_, X_test, y_test, n_repeats=10, random_state=109)
+
+    # organize results in DataFrame
+    pi_data = {'Importance_mean': pi_results['importances_mean'],
+                     'Importance_std': pi_results['importances_std'],
+                     'Feature': X_test.columns}
+    pi_df = pd.DataFrame(pi_data).sort_values('Importance_mean', ascending=False)
+
+    # plot
+    plt.figure(figsize=figsize)
+    ax = sns.barplot(x='Importance_mean', y='Feature', data=pi_df.head(n_features), color='#4286f4')
+    error = pi_df.head(n_features)['Importance_std'] * 2
+    ax.errorbar(x=pi_df.head(n_features)['Importance_mean'], y=pi_df.head(n_features)['Feature'], xerr=error, fmt=' ', color='red', capsize=5)
+    ax.set_xlabel('Importance (Mean +/- Standard Deviation)')
+    ax.set_title('Permutation-based Feature Importance')
+    plt.tight_layout();
+    
+    
+#################################################################################    
+##### Function to compute feature importances (mean decrease in impurity)
+#################################################################################
+def plot_feature_imp_MDI(model, n_features=20, figsize=(8, 4)):
+    '''
+    Parameters
+    ----------
+    model : fitted sklearn model
+    n_features : number of best features to plot in decending order
+    figsize: size of the figure
+
+    Returns: (plot)
+    '''
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+
+    df = pd.DataFrame([model.best_estimator_.feature_names_in_, model.best_estimator_.feature_importances_]).T
+    df.columns = ['Feature', 'Importance']
+    df.sort_values(by='Importance', ascending=False, inplace=True)
+    plt.figure(figsize=figsize)
+    ax = sns.barplot(x='Importance', y='Feature', data=df.head(n_features), color='#4286f4')
+    ax.set_title('Minimum Decrease in Impurity based Feature Importance')
+    plt.tight_layout();
+    
+
+#################################################################################    
+##### Function to plot SHAP feature importance
+#################################################################################
+def plot_shap_values(model, X_train, X_test, n_samples=100, figsize=(10, 6)):
+    '''
+    Parameters
+    ----------
+    model : fitted sklearn model
+    X_train: training features
+    X_test: testing features
+    n_samples: the maximum number of samples to use from the passed background data
+    figsize: size of the figure
+
+    Returns: (plot)
+    '''
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+    from shap import TreeExplainer, summary_plot, maskers
+    
+    background = maskers.Independent(X_train, max_samples=n_samples) # data to train explainer on
+    exp = TreeExplainer(model.best_estimator_, 
+                                     data=background, 
+                                     feature_perturbation='interventional', 
+                                     model_output='probability')
+    sv = exp.shap_values(X_test, approximate=True, tree_limit=1000)
+    plt.figure(figsize=figsize)
+    summary_plot(sv[1], X_test, plot_size=figsize) # for class 1   
+    
+
+#################################################################################    
+##### Function to plot LIME feature importance
+#################################################################################
+def plot_LIME(model, X_train, X_test, idx=1, n_features=4):
+    '''
+    Parameters
+    ----------
+    model : fitted sklearn model
+    X_train: training features
+    X_test: testing features
+    idx: the instance to explain from the test set
+    n_features: number of features to use
+
+    Returns: (plot)
+    '''
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+    from lime.lime_tabular import LimeTabularExplainer
+
+    # create a LIME Explainer
+    explainer = LimeTabularExplainer(
+        training_data=X_train.values,
+        feature_names=X_train.columns.tolist(),
+        class_names=[0, 1],
+        mode='classification'
+    )
+    
+    # instance to explain from the test set
+    instance = X_test.values[idx]
+    # generate an explanation for a prediction
+    exp = explainer.explain_instance(instance, model.predict_proba, num_features=n_features)
+    # show the explanation
+    exp.show_in_notebook(show_table=True)    
     
