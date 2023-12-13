@@ -278,8 +278,8 @@ def stratified_split(df):
     print('===============================================================')
     
     return X_train, X_test, y_train, y_test
-    
-
+            
+        
 #################################################################################
 ##### Function to prepare categorical codes for XGBoost
 #################################################################################
@@ -528,25 +528,29 @@ def plot_ROC_curves(models: dict, data: tuple):
     from sklearn.metrics import roc_auc_score, roc_curve, RocCurveDisplay, auc
     
     # unpack the data
-    X_train, X_test, y_train, y_test = data
+    X_train, X_test, X_train_poly, X_test_poly, X_train_xgb, X_test_xgb, y_train, y_test = data
 
     # set up the subplots for training and test data
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
+    fig.suptitle('ROC Curves and AUC', fontsize=14)
+
     # plot for Training Data
     for name, model in models.items():
         # predict probabilities for the positive class
-        if hasattr(model, "predict_proba"):
-            y_scores_train = model.predict_proba(X_train)[:, 1]
+        if name=='Lasso Logistic Poly':
+            y_scores_train = model.predict_proba(X_train_poly)[:, 1]
+        elif name=='Extreme Gradient Boosting':
+            y_scores_train = model.predict_proba(X_train_xgb)[:, 1]
         else:
-            y_scores_train = model.decision_function(X_train)
+            y_scores_train = model.predict_proba(X_train)[:, 1]
 
         # compute ROC metrics and AUC for training data
         fpr_train, tpr_train, _ = roc_curve(y_train, y_scores_train)
         auc_train = roc_auc_score(y_train, y_scores_train)
 
         # plot using RocCurveDisplay on training data axis
-        RocCurveDisplay(fpr=fpr_train, tpr=tpr_train).plot(ax=ax1, label=f'{name} (AUC = {auc_train:.2f})')
+        RocCurveDisplay(fpr=fpr_train, tpr=tpr_train).plot(ax=ax1, label=f'{name} (AUC = {auc_train:.1%})')
 
     # add the diagonal line for AUC = 0.5 on training data axis
     ax1.plot([0, 1], [0, 1], color='black', linestyle='--', label='AUC = 0.5 (Random)')
@@ -554,17 +558,19 @@ def plot_ROC_curves(models: dict, data: tuple):
     # plot for Test Data
     for name, model in models.items():
         # use already trained model to predict on test data
-        if hasattr(model, "predict_proba"):
-            y_scores_test = model.predict_proba(X_test)[:, 1]
+        if name=='Lasso Logistic Poly':
+            y_scores_test = model.predict_proba(X_test_poly)[:, 1]
+        elif name=='Extreme Gradient Boosting':
+            y_scores_test = model.predict_proba(X_test_xgb)[:, 1]
         else:
-            y_scores_test = model.decision_function(X_test)
+            y_scores_test = model.predict_proba(X_test)[:, 1]
 
         # compute ROC metrics and AUC for test data
         fpr_test, tpr_test, _ = roc_curve(y_test, y_scores_test)
         auc_test = roc_auc_score(y_test, y_scores_test)
 
         # plot using RocCurveDisplay on test data axis
-        RocCurveDisplay(fpr=fpr_test, tpr=tpr_test).plot(ax=ax2, label=f'{name} (AUC = {auc_test:.2f})')
+        RocCurveDisplay(fpr=fpr_test, tpr=tpr_test).plot(ax=ax2, label=f'{name} (AUC = {auc_test:.1%})')
 
     # add the diagonal line for AUC = 0.5 on test data axis
     ax2.plot([0, 1], [0, 1], color='black', linestyle='--', label='AUC = 0.5 (Random)')
@@ -574,13 +580,13 @@ def plot_ROC_curves(models: dict, data: tuple):
     ax2.set_ylim([0, 1.05])
 
     # add plot details for both subplots
-    ax1.set_title('ROC Curves and AUC for Training Data')
+    ax1.set_title('Train Set')
     ax1.set_xlabel('False Positive Rate')
     ax1.set_ylabel('True Positive Rate')
     ax1.legend(loc='lower right', fontsize=8)
     ax1.grid(True)
 
-    ax2.set_title('ROC Curves and AUC for Test Data')
+    ax2.set_title('Test Set')
     ax2.set_xlabel('False Positive Rate')
     ax2.set_ylabel('True Positive Rate')
     ax2.legend(loc='lower right', fontsize=8)
@@ -610,25 +616,29 @@ def plot_PR_curves(models: dict, data: tuple):
     from sklearn.metrics import average_precision_score, precision_recall_curve, PrecisionRecallDisplay
 
     # unpack the data
-    X_train, X_test, y_train, y_test = data
+    X_train, X_test, X_train_poly, X_test_poly, X_train_xgb, X_test_xgb, y_train, y_test = data
     
     # set up the subplots for training and test data
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
+    fig.suptitle('Precision-Recall Curves with AP (average precision)', fontsize=14)
+
     # plot for Training Data
     for name, model in models.items():
         # predict probabilities for the positive class
-        if hasattr(model, "predict_proba"):
-            y_scores_train = model.predict_proba(X_train)[:, 1]
+        if name=='Lasso Logistic Poly':
+            y_scores_train = model.predict_proba(X_train_poly)[:, 1]
+        elif name=='Extreme Gradient Boosting':
+            y_scores_train = model.predict_proba(X_train_xgb)[:, 1]
         else:
-            y_scores_train = model.decision_function(X_train)
+            y_scores_train = model.predict_proba(X_train)[:, 1]
 
         # compute Precision-Recall metrics and Average Precision (AP) for training data
         precision_train, recall_train, _ = precision_recall_curve(y_train, y_scores_train)
         ap_train = average_precision_score(y_train, y_scores_train)
 
         #pPlot using PrecisionRecallDisplay on training data axis
-        PrecisionRecallDisplay(precision=precision_train, recall=recall_train).plot(ax=ax1, label=f'{name} (AP = {ap_train:.2f})')
+        PrecisionRecallDisplay(precision=precision_train, recall=recall_train).plot(ax=ax1, label=f'{name} (AP = {ap_train:.1%})')
 
     # add the horizontal line for random (no-skill) classifier on training data axis
     prevalence_train = y_train.mean()
@@ -637,17 +647,19 @@ def plot_PR_curves(models: dict, data: tuple):
     # plot for Test Data
     for name, model in models.items():
         # use already trained model to predict on test data
-        if hasattr(model, "predict_proba"):
-            y_scores_test = model.predict_proba(X_test)[:, 1]
+        if name=='Lasso Logistic Poly':
+            y_scores_test = model.predict_proba(X_test_poly)[:, 1]
+        elif name=='Extreme Gradient Boosting':
+            y_scores_test = model.predict_proba(X_test_xgb)[:, 1]
         else:
-            y_scores_test = model.decision_function(X_test)
+            y_scores_test = model.predict_proba(X_test)[:, 1]
 
         # compute Precision-Recall metrics and Average Precision (AP) for test data
         precision_test, recall_test, _ = precision_recall_curve(y_test, y_scores_test)
         ap_test = average_precision_score(y_test, y_scores_test)
 
         # plot using PrecisionRecallDisplay on test data axis
-        PrecisionRecallDisplay(precision=precision_test, recall=recall_test).plot(ax=ax2, label=f'{name} (AP = {ap_test:.2f})')
+        PrecisionRecallDisplay(precision=precision_test, recall=recall_test).plot(ax=ax2, label=f'{name} (AP = {ap_test:.1%})')
 
     # add the horizontal line for random (no-skill) classifier on test data axis
     prevalence_test = y_test.mean()
@@ -658,13 +670,13 @@ def plot_PR_curves(models: dict, data: tuple):
     ax2.set_ylim([-0.05, 1.05])
 
     # add plot details for both subplots
-    ax1.set_title('Precision-Recall Curves\nwith AP (average precision) for Training Data')
+    ax1.set_title('Train Set')
     ax1.set_xlabel('Recall')
     ax1.set_ylabel('Precision')
     ax1.legend(loc='center', fontsize=8)
     ax1.grid(True)
 
-    ax2.set_title('Precision-Recall Curves\nwith AP (average precision) for Test Data')
+    ax2.set_title('Test Set')
     ax2.set_xlabel('Recall')
     ax2.set_ylabel('Precision')
     ax2.legend(loc='center', fontsize=8)
@@ -703,7 +715,7 @@ def get_train_val_scores(model, params):
  #################################################################################    
 ##### Function to compute feature importances (permutation importance)
 #################################################################################
-def plot_feature_imp_perm(model, X_test, y_test, n_features=20, figsize=(8, 4)):
+def plot_feature_imp_perm(model, X_train, y_train, n_features=20, figsize=(6, 4)):
     '''
     Parameters
     ----------
@@ -725,12 +737,14 @@ def plot_feature_imp_perm(model, X_test, y_test, n_features=20, figsize=(8, 4)):
     from sklearn.inspection import permutation_importance
     
     # compute permutation Importance
-    pi_results = permutation_importance(model.best_estimator_, X_test, y_test, n_repeats=10, random_state=109)
+    pi_results = permutation_importance(model, X_train, y_train, 
+                                                               n_repeats=10, scoring='roc_auc', 
+                                                               random_state=109)
 
     # organize results in DataFrame
     pi_data = {'Importance_mean': pi_results['importances_mean'],
                      'Importance_std': pi_results['importances_std'],
-                     'Feature': X_test.columns}
+                     'Feature': X_train.columns}
     pi_df = pd.DataFrame(pi_data).sort_values('Importance_mean', ascending=False)
 
     # plot
@@ -746,7 +760,7 @@ def plot_feature_imp_perm(model, X_test, y_test, n_features=20, figsize=(8, 4)):
 #################################################################################    
 ##### Function to compute feature importances (mean decrease in impurity)
 #################################################################################
-def plot_feature_imp_MDI(model, n_features=20, figsize=(8, 4)):
+def plot_feature_imp_MDI(model, n_features=20, figsize=(6, 4)):
     '''
     Parameters
     ----------
@@ -775,16 +789,14 @@ def plot_feature_imp_MDI(model, n_features=20, figsize=(8, 4)):
     
 
 #################################################################################    
-##### Function to plot SHAP feature importance
+##### Function to get and plot SHAP feature importance
 #################################################################################
-def plot_shap_values(model, X_train, X_test, n_samples=100, figsize=(10, 6)):
+def get_shap_values(model, X_train, figsize=(8, 5)):
     '''
     Parameters
     ----------
     model : fitted sklearn model
     X_train: training features
-    X_test: testing features
-    n_samples: the maximum number of samples to use from the passed background data
     figsize: size of the figure
 
     Returns: (plot)
@@ -797,29 +809,29 @@ def plot_shap_values(model, X_train, X_test, n_samples=100, figsize=(10, 6)):
     from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
     from sklearn.ensemble import AdaBoostClassifier 
     from xgboost import XGBClassifier
-    from shap import TreeExplainer, summary_plot, maskers
+    from shap.explainers import Tree
+    from shap import summary_plot
     
-    background = maskers.Independent(X_train, max_samples=n_samples) # data to train explainer on
-    exp = TreeExplainer(model.best_estimator_, 
-                                     data=background, 
-                                     feature_perturbation='interventional', 
-                                     model_output='probability')
-    sv = exp.shap_values(X_test, approximate=True, tree_limit=1000)
-    plt.figure(figsize=figsize)
-    summary_plot(sv[1], X_test, plot_size=figsize) # for class 1   
+    # Reference: Python Projects for Data Science, Second Edition
+    shap_explainer = Tree(model, data=X_train)
+    shap_values = shap_explainer(X_train)
+    summary_plot(shap_values.values, X_train, show=False, plot_size=figsize)  
+    plt.title('SHAP Feature Importance')
+    plt.show();
+    
+    return shap_values
     
 
 #################################################################################    
 ##### Function to plot LIME feature importance
 #################################################################################
-def plot_LIME(model, X_train, X_test, idx=1, n_features=4):
+def plot_LIME(model, X_train, idx=1, n_features=4):
     '''
     Parameters
     ----------
     model : fitted sklearn model
     X_train: training features
-    X_test: testing features
-    idx: the instance to explain from the test set
+    idx: the instance to explain from the train set
     n_features: number of features to use
 
     Returns: (plot)
@@ -842,8 +854,8 @@ def plot_LIME(model, X_train, X_test, idx=1, n_features=4):
         mode='classification'
     )
     
-    # instance to explain from the test set
-    instance = X_test.values[idx]
+    # instance to explain from the train set
+    instance = X_train.values[idx]
     # generate an explanation for a prediction
     exp = explainer.explain_instance(instance, model.predict_proba, num_features=n_features)
     # show the explanation
