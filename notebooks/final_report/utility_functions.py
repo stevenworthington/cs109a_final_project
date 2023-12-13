@@ -230,6 +230,7 @@ def get_last_encounter(df):
 ##### Function to aggregate encounters
 #################################################################################
 def aggregate_encounters(df):
+
     import utility_functions as utl
     
     if 'patient_nbr' not in df.columns:
@@ -254,9 +255,12 @@ def aggregate_encounters(df):
 ##### Function to perform data partitioning
 #################################################################################
 def stratified_split(df):
+    
+    from sklearn.model_selection import train_test_split
+    
     y = df['readmitted']
     X = df.drop(columns=['readmitted'])
-    from sklearn.model_selection import train_test_split
+    
     X_train, X_test, y_train, y_test = train_test_split(
         X, y,
         stratify=y, 
@@ -277,47 +281,14 @@ def stratified_split(df):
     
 
 #################################################################################
-##### Custom transformer code based on A. Geron Book by O'Reilly
-#################################################################################
-class PrepQuant(BaseEstimator, TransformerMixin):
-    
-    def __init__(self, corr_threshold=0.85, cardinality_threshold=10):
-        self.corr_threshold=corr_threshold
-        self.cardinality_threshold=cardinality_threshold
-    
-    def fit(self, X, y=None):
-        #source: stackoverflow
-        corr_matrix = X.corr().abs()
-        # Select upper triangle of correlation matrix
-        upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-        self.corr_cols = [column for column in upper.columns if any(upper[column] >= self.corr_threshold)] 
-        
-        self.high_cardinal_cols = [col for col in X.columns if X[col].nunique()>self.cardinality_threshold]
-        
-        return self
-    
-    def transform(self, X):
-            
-        X.drop(self.corr_cols, axis=1, inplace=True)
-        
-        #log Transformation is done here not because Logistic Regression
-        #depends on it but to reduce the effects of outliers
-        for col in X.columns:
-            if col in self.high_cardinal_cols:
-                X['log_'+col]=np.log1p(X[col])
-                X.drop(col,axis=1,inplace=True)
-        self.columns = X.columns
-        return X
-                
-    def get_feature_names_out(self, *args, **params):
-        return self.columns
-
-
-#################################################################################
 ##### Function to prepare categorical codes for XGBoost
 #################################################################################
 def prep_cat(X):
+
+    import pandas as pd
+    
     cat_to_codes = dict()
+    
     for col in X.select_dtypes('object'):
         X[col] = X[col].astype('category')
         # Store the encodings 
@@ -326,6 +297,7 @@ def prep_cat(X):
         # This is not necessary for XGBoost but is done to facilitate downstream tasks 
         # (Permutation Importance, etc.)
         X[col] = X[col].cat.codes
+        
     return cat_to_codes
     
 
@@ -333,6 +305,10 @@ def prep_cat(X):
 ##### Function to calculate best hyperparameter values fo XGBoost
 #################################################################################
 def get_best_params(X_train, y_train, X_val, y_val, scale_pos_weight=1, verbose=True):
+
+    import numpy as np
+    import xgboost as xgb
+    
     val_aucs = []
     params = []
     
@@ -363,6 +339,9 @@ def get_best_params(X_train, y_train, X_val, y_val, scale_pos_weight=1, verbose=
 ##### Function to calculate predicted probabilities by deciles
 #################################################################################
 def by_deciles(y_actual, y_probs_pred):
+
+    import pandas as pd
+    
     deciles = pd.qcut(x=y_probs_pred,q=10)
     combine_df = pd.DataFrame(data={'Pred. Decile':deciles,
                                     'Avg. Pred Prob':y_probs_pred,
