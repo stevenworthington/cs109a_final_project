@@ -314,7 +314,9 @@ def get_best_params(X_train, y_train, X_val, y_val, scale_pos_weight=1, verbose=
     
     for max_depth in range(1,9):
         for eta in [0.001,0.005,0.01,0.05,0.1,0.2,0.3,0.4,0.5]:
-            xgb_clf = xgb.XGBClassifier(objective='binary:logistic',
+            xgb_clf = xgb.XGBClassifier(
+                                        objective='binary:logistic',
+                                        tree_method='hist',
                                         eval_metric='auc',
                                         n_estimators=10000,
                                         learning_rate=eta,
