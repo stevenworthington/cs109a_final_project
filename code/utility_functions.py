@@ -275,7 +275,44 @@ def stratified_split(df):
     
     return X_train, X_test, y_train, y_test
     
+
+#################################################################################
+##### Custom transformer code based on A. Geron Book by O'Reilly
+#################################################################################
+class PrepQuant(BaseEstimator, TransformerMixin):
     
+    def __init__(self, corr_threshold=0.85, cardinality_threshold=10):
+        self.corr_threshold=corr_threshold
+        self.cardinality_threshold=cardinality_threshold
+    
+    def fit(self, X, y=None):
+        #source: stackoverflow
+        corr_matrix = X.corr().abs()
+        # Select upper triangle of correlation matrix
+        upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+        self.corr_cols = [column for column in upper.columns if any(upper[column] >= self.corr_threshold)] 
+        
+        self.high_cardinal_cols = [col for col in X.columns if X[col].nunique()>self.cardinality_threshold]
+        
+        return self
+    
+    def transform(self, X):
+            
+        X.drop(self.corr_cols, axis=1, inplace=True)
+        
+        #log Transformation is done here not because Logistic Regression
+        #depends on it but to reduce the effects of outliers
+        for col in X.columns:
+            if col in self.high_cardinal_cols:
+                X['log_'+col]=np.log1p(X[col])
+                X.drop(col,axis=1,inplace=True)
+        self.columns = X.columns
+        return X
+                
+    def get_feature_names_out(self, *args, **params):
+        return self.columns
+        
+        
 #################################################################################
 ##### Function to calculate all performance metrics
 #################################################################################
@@ -364,7 +401,7 @@ def get_results_df(results: list, model: str = None):
         df = df[df['model'] == model]
     
     # turn off scientific notation
-    pd.set_option('display.float_format', '{:.1f}'.format)
+    pd.set_option('display.float_format', '{:.2f}'.format)
     
     return df
 
