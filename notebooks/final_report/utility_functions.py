@@ -355,7 +355,37 @@ def by_deciles(y_actual, y_probs_pred):
                                                                    right=round(x.right,4)))
     return by_decile_df
     
+
+#################################################################################    
+##### Function to get mean training and validation scores for each parameter combination
+#################################################################################
+def get_train_val_scores(model, params):
+    '''
+    Parameters
+    ----------
+    model : fitted sklearn model
+    params : list of hyperparameters that have been tuned
     
+    Returns: pandas data frame
+    '''
+    import pandas as pd
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+    
+    score_cols = ['mean_test_score', 'std_test_score', 'mean_train_score']
+    param_cols = ['param_' + param for param in params]
+    df_scores = pd.DataFrame(model.cv_results_)[score_cols + param_cols]
+    df_scores.rename(columns={'mean_test_score': 'mean_val_score', 'std_test_score': 'std_val_score'}, inplace=True)
+    df_scores.sort_values(by='mean_val_score', ascending=False, inplace=True)
+    cols_to_multiply = ['mean_val_score', 'std_val_score', 'mean_train_score']
+    df_scores[cols_to_multiply] = df_scores[cols_to_multiply].apply(lambda x: x * 100)
+    
+    return df_scores
+    
+
 #################################################################################
 ##### Function to calculate all performance metrics
 #################################################################################
@@ -450,6 +480,69 @@ def get_results_df(results: list, model: str = None):
 
 
 #################################################################################
+##### Function to get plot pairwise predictions from all models
+#################################################################################
+def plot_predictions_corr(models: dict, data: tuple):
+    '''
+    Parameters
+    ----------
+    models : (list) List of tuples with model names (first element) and fitted sklearn estimators (second element)
+    data : (tuple) Contains train and test split for X and y
+
+    Returns: (plot)
+    '''
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import numpy as np
+    import pandas as pd
+    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
+    from sklearn.tree import DecisionTreeClassifier 
+    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+    from sklearn.ensemble import AdaBoostClassifier 
+    from xgboost import XGBClassifier
+    
+    # unpack the data
+    X_train, X_test, X_train_poly, X_test_poly, X_train_xgb, X_test_xgb, y_train, y_test = data
+
+    # initialize DataFrames for storing predictions
+    predictions_train = pd.DataFrame()
+    predictions_test = pd.DataFrame()
+
+    # iterate over models and store predictions
+    for name, model in models:
+        # predict probabilities for the positive class
+        if name == 'Lasso Logistic Poly':
+            predictions_train[name] = model.predict_proba(X_train_poly)[:, 1]
+            predictions_test[name] = model.predict_proba(X_test_poly)[:, 1]
+        elif name == 'Extreme Gradient Boosting':
+            predictions_train[name] = model.predict_proba(X_train_xgb)[:, 1]
+            predictions_test[name] = model.predict_proba(X_test_xgb)[:, 1]
+        else:
+            predictions_train[name] = model.predict_proba(X_train)[:, 1]
+            predictions_test[name] = model.predict_proba(X_test)[:, 1]
+
+    # calculate correlation matrices
+    corr_train = predictions_train.corr()
+    corr_test = predictions_test.corr()
+
+    # prepare subplots
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+    fig.suptitle('Correlations of Model Predictions', fontsize=14)
+    
+    # plot heatmaps
+    sns.heatmap(corr_train, annot=True, fmt=".2f", ax=axes[0], cmap='coolwarm')
+    sns.heatmap(corr_test, annot=True, fmt=".2f", ax=axes[1], cmap='coolwarm')
+
+    # set titles
+    axes[0].set_title('Train Correlations')
+    axes[1].set_title('Test Correlations')
+
+    plt.tight_layout()
+    plt.show()
+    
+    
+#################################################################################
 ##### Function to plot performance metrics for train and test sets
 #################################################################################
 def plot_performance_metrics(df, model_order=None):
@@ -535,42 +628,35 @@ def plot_ROC_curves(models: dict, data: tuple):
 
     fig.suptitle('ROC Curves and AUC', fontsize=14)
 
-    # plot for Training Data
+    # get predictions
     for name, model in models.items():
         # predict probabilities for the positive class
         if name=='Lasso Logistic Poly':
             y_scores_train = model.predict_proba(X_train_poly)[:, 1]
+            y_scores_test = model.predict_proba(X_test_poly)[:, 1]
         elif name=='Extreme Gradient Boosting':
             y_scores_train = model.predict_proba(X_train_xgb)[:, 1]
+            y_scores_test = model.predict_proba(X_test_xgb)[:, 1]
         else:
             y_scores_train = model.predict_proba(X_train)[:, 1]
+            y_scores_test = model.predict_proba(X_test)[:, 1]
 
-        # compute ROC metrics and AUC for training data
-        fpr_train, tpr_train, _ = roc_curve(y_train, y_scores_train)
-        auc_train = roc_auc_score(y_train, y_scores_train)
+    # compute ROC metrics and AUC for training data
+    fpr_train, tpr_train, _ = roc_curve(y_train, y_scores_train)
+    auc_train = roc_auc_score(y_train, y_scores_train)
 
-        # plot using RocCurveDisplay on training data axis
-        RocCurveDisplay(fpr=fpr_train, tpr=tpr_train).plot(ax=ax1, label=f'{name} (AUC = {auc_train:.1%})')
+    # plot using RocCurveDisplay on training data axis
+    RocCurveDisplay(fpr=fpr_train, tpr=tpr_train).plot(ax=ax1, label=f'{name} (AUC = {auc_train:.1%})')
 
     # add the diagonal line for AUC = 0.5 on training data axis
     ax1.plot([0, 1], [0, 1], color='black', linestyle='--', label='AUC = 0.5 (Random)')
 
-    # plot for Test Data
-    for name, model in models.items():
-        # use already trained model to predict on test data
-        if name=='Lasso Logistic Poly':
-            y_scores_test = model.predict_proba(X_test_poly)[:, 1]
-        elif name=='Extreme Gradient Boosting':
-            y_scores_test = model.predict_proba(X_test_xgb)[:, 1]
-        else:
-            y_scores_test = model.predict_proba(X_test)[:, 1]
+    # compute ROC metrics and AUC for test data
+    fpr_test, tpr_test, _ = roc_curve(y_test, y_scores_test)
+    auc_test = roc_auc_score(y_test, y_scores_test)
 
-        # compute ROC metrics and AUC for test data
-        fpr_test, tpr_test, _ = roc_curve(y_test, y_scores_test)
-        auc_test = roc_auc_score(y_test, y_scores_test)
-
-        # plot using RocCurveDisplay on test data axis
-        RocCurveDisplay(fpr=fpr_test, tpr=tpr_test).plot(ax=ax2, label=f'{name} (AUC = {auc_test:.1%})')
+    # plot using RocCurveDisplay on test data axis
+    RocCurveDisplay(fpr=fpr_test, tpr=tpr_test).plot(ax=ax2, label=f'{name} (AUC = {auc_test:.1%})')
 
     # add the diagonal line for AUC = 0.5 on test data axis
     ax2.plot([0, 1], [0, 1], color='black', linestyle='--', label='AUC = 0.5 (Random)')
@@ -623,43 +709,36 @@ def plot_PR_curves(models: dict, data: tuple):
 
     fig.suptitle('Precision-Recall Curves with AP (average precision)', fontsize=14)
 
-    # plot for Training Data
+    # get predictions
     for name, model in models.items():
         # predict probabilities for the positive class
         if name=='Lasso Logistic Poly':
             y_scores_train = model.predict_proba(X_train_poly)[:, 1]
+            y_scores_test = model.predict_proba(X_test_poly)[:, 1]
         elif name=='Extreme Gradient Boosting':
             y_scores_train = model.predict_proba(X_train_xgb)[:, 1]
+            y_scores_test = model.predict_proba(X_test_xgb)[:, 1]
         else:
             y_scores_train = model.predict_proba(X_train)[:, 1]
+            y_scores_test = model.predict_proba(X_test)[:, 1]
 
-        # compute Precision-Recall metrics and Average Precision (AP) for training data
-        precision_train, recall_train, _ = precision_recall_curve(y_train, y_scores_train)
-        ap_train = average_precision_score(y_train, y_scores_train)
+    # compute Precision-Recall metrics and Average Precision (AP) for training data
+    precision_train, recall_train, _ = precision_recall_curve(y_train, y_scores_train)
+    ap_train = average_precision_score(y_train, y_scores_train)
 
-        #pPlot using PrecisionRecallDisplay on training data axis
-        PrecisionRecallDisplay(precision=precision_train, recall=recall_train).plot(ax=ax1, label=f'{name} (AP = {ap_train:.1%})')
+    # Plot using PrecisionRecallDisplay on training data axis
+    PrecisionRecallDisplay(precision=precision_train, recall=recall_train).plot(ax=ax1, label=f'{name} (AP = {ap_train:.1%})')
 
     # add the horizontal line for random (no-skill) classifier on training data axis
     prevalence_train = y_train.mean()
     ax1.hlines(prevalence_train, 0, 1, colors='black', linestyles='--', label=f'No Skill (AP = {prevalence_train:.2f})')
 
-    # plot for Test Data
-    for name, model in models.items():
-        # use already trained model to predict on test data
-        if name=='Lasso Logistic Poly':
-            y_scores_test = model.predict_proba(X_test_poly)[:, 1]
-        elif name=='Extreme Gradient Boosting':
-            y_scores_test = model.predict_proba(X_test_xgb)[:, 1]
-        else:
-            y_scores_test = model.predict_proba(X_test)[:, 1]
+    # compute Precision-Recall metrics and Average Precision (AP) for test data
+    precision_test, recall_test, _ = precision_recall_curve(y_test, y_scores_test)
+    ap_test = average_precision_score(y_test, y_scores_test)
 
-        # compute Precision-Recall metrics and Average Precision (AP) for test data
-        precision_test, recall_test, _ = precision_recall_curve(y_test, y_scores_test)
-        ap_test = average_precision_score(y_test, y_scores_test)
-
-        # plot using PrecisionRecallDisplay on test data axis
-        PrecisionRecallDisplay(precision=precision_test, recall=recall_test).plot(ax=ax2, label=f'{name} (AP = {ap_test:.1%})')
+    # plot using PrecisionRecallDisplay on test data axis
+    PrecisionRecallDisplay(precision=precision_test, recall=recall_test).plot(ax=ax2, label=f'{name} (AP = {ap_test:.1%})')
 
     # add the horizontal line for random (no-skill) classifier on test data axis
     prevalence_test = y_test.mean()
@@ -683,33 +762,6 @@ def plot_PR_curves(models: dict, data: tuple):
     ax2.grid(True)
 
     plt.show()    
-    
-
-#################################################################################    
-##### Function to get mean training and validation scores for each parameter combination
-#################################################################################
-def get_train_val_scores(model, params):
-    '''
-    Parameters
-    ----------
-    model : fitted sklearn model
-    params : list of hyperparameters that have been tuned
-    
-    Returns: pandas data frame
-    '''
-    import pandas as pd
-    from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
-    from sklearn.tree import DecisionTreeClassifier 
-    from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
-    from sklearn.ensemble import AdaBoostClassifier 
-    from xgboost import XGBClassifier
-    
-    score_cols = ['mean_test_score', 'std_test_score', 'mean_train_score']
-    param_cols = ['param_' + param for param in params]
-    df_scores = pd.DataFrame(model.cv_results_)[score_cols + param_cols]
-    df_scores.sort_values(by='mean_test_score', ascending=False, inplace=True)
-    
-    return df_scores
     
  
  #################################################################################    
