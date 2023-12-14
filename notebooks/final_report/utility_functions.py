@@ -526,7 +526,7 @@ def plot_predictions_corr(models: dict, data: tuple):
     corr_test = predictions_test.corr()
 
     # prepare subplots
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
 
     fig.suptitle('Correlations of Model Predictions', fontsize=14)
     
@@ -641,22 +641,22 @@ def plot_ROC_curves(models: dict, data: tuple):
             y_scores_train = model.predict_proba(X_train)[:, 1]
             y_scores_test = model.predict_proba(X_test)[:, 1]
 
-    # compute ROC metrics and AUC for training data
-    fpr_train, tpr_train, _ = roc_curve(y_train, y_scores_train)
-    auc_train = roc_auc_score(y_train, y_scores_train)
+        # compute ROC metrics and AUC for training data
+        fpr_train, tpr_train, _ = roc_curve(y_train, y_scores_train)
+        auc_train = roc_auc_score(y_train, y_scores_train)
 
-    # plot using RocCurveDisplay on training data axis
-    RocCurveDisplay(fpr=fpr_train, tpr=tpr_train).plot(ax=ax1, label=f'{name} (AUC = {auc_train:.1%})')
+        # compute ROC metrics and AUC for test data
+        fpr_test, tpr_test, _ = roc_curve(y_test, y_scores_test)
+        auc_test = roc_auc_score(y_test, y_scores_test)
+        
+        # plot using RocCurveDisplay on training data axis
+        RocCurveDisplay(fpr=fpr_train, tpr=tpr_train).plot(ax=ax1, label=f'{name} (AUC = {auc_train:.1%})')
 
+        # plot using RocCurveDisplay on test data axis
+        RocCurveDisplay(fpr=fpr_test, tpr=tpr_test).plot(ax=ax2, label=f'{name} (AUC = {auc_test:.1%})')
+    
     # add the diagonal line for AUC = 0.5 on training data axis
     ax1.plot([0, 1], [0, 1], color='black', linestyle='--', label='AUC = 0.5 (Random)')
-
-    # compute ROC metrics and AUC for test data
-    fpr_test, tpr_test, _ = roc_curve(y_test, y_scores_test)
-    auc_test = roc_auc_score(y_test, y_scores_test)
-
-    # plot using RocCurveDisplay on test data axis
-    RocCurveDisplay(fpr=fpr_test, tpr=tpr_test).plot(ax=ax2, label=f'{name} (AUC = {auc_test:.1%})')
 
     # add the diagonal line for AUC = 0.5 on test data axis
     ax2.plot([0, 1], [0, 1], color='black', linestyle='--', label='AUC = 0.5 (Random)')
@@ -722,23 +722,23 @@ def plot_PR_curves(models: dict, data: tuple):
             y_scores_train = model.predict_proba(X_train)[:, 1]
             y_scores_test = model.predict_proba(X_test)[:, 1]
 
-    # compute Precision-Recall metrics and Average Precision (AP) for training data
-    precision_train, recall_train, _ = precision_recall_curve(y_train, y_scores_train)
-    ap_train = average_precision_score(y_train, y_scores_train)
-
-    # Plot using PrecisionRecallDisplay on training data axis
-    PrecisionRecallDisplay(precision=precision_train, recall=recall_train).plot(ax=ax1, label=f'{name} (AP = {ap_train:.1%})')
-
+        # compute Precision-Recall metrics and Average Precision (AP) for training data
+        precision_train, recall_train, _ = precision_recall_curve(y_train, y_scores_train)
+        ap_train = average_precision_score(y_train, y_scores_train)
+        
+        # compute Precision-Recall metrics and Average Precision (AP) for test data
+        precision_test, recall_test, _ = precision_recall_curve(y_test, y_scores_test)
+        ap_test = average_precision_score(y_test, y_scores_test)
+    
+        # Plot using PrecisionRecallDisplay on training data axis
+        PrecisionRecallDisplay(precision=precision_train, recall=recall_train).plot(ax=ax1, label=f'{name} (AP = {ap_train:.1%})')
+        
+        # plot using PrecisionRecallDisplay on test data axis
+        PrecisionRecallDisplay(precision=precision_test, recall=recall_test).plot(ax=ax2, label=f'{name} (AP = {ap_test:.1%})')
+    
     # add the horizontal line for random (no-skill) classifier on training data axis
     prevalence_train = y_train.mean()
     ax1.hlines(prevalence_train, 0, 1, colors='black', linestyles='--', label=f'No Skill (AP = {prevalence_train:.2f})')
-
-    # compute Precision-Recall metrics and Average Precision (AP) for test data
-    precision_test, recall_test, _ = precision_recall_curve(y_test, y_scores_test)
-    ap_test = average_precision_score(y_test, y_scores_test)
-
-    # plot using PrecisionRecallDisplay on test data axis
-    PrecisionRecallDisplay(precision=precision_test, recall=recall_test).plot(ax=ax2, label=f'{name} (AP = {ap_test:.1%})')
 
     # add the horizontal line for random (no-skill) classifier on test data axis
     prevalence_test = y_test.mean()
